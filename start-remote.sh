@@ -92,4 +92,8 @@ echo "[start-remote] Starting on http://$BIND_HOST:$PORT"
 export HERMES_WEBUI_HOST="$BIND_HOST"
 export HERMES_WEBUI_PORT="$PORT"
 
-exec "${REPO_ROOT}/start.sh" "${PASSTHROUGH_ARGS[@]}"
+if [[ ${#PASSTHROUGH_ARGS[@]} -gt 0 ]]; then
+  exec "${REPO_ROOT}/start.sh" "${PASSTHROUGH_ARGS[@]}"
+else
+  exec "${REPO_ROOT}/start.sh"
+fi
