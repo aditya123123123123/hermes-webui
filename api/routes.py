@@ -4575,7 +4575,113 @@ def handle_get(handler, parsed) -> bool:
             logger.exception("rollback/diff failed")
             return bad(handler, str(e), status=500)
 
+    if parsed.path == "/api/jazz-ml":
+        return _handle_jazz_ml(handler, parsed)
+
     return False  # 404
+
+
+# ── Jazz ML panel ──────────────────────────────────────────────────────────────
+
+
+def _jazz_ml_root() -> Path:
+    """Return the jazz_solo_generator root (one level above this hermes-webui dir)."""
+    return Path(__file__).resolve().parent.parent.parent
+
+
+def _jazz_ml_read_md(path: Path) -> str | None:
+    try:
+        return path.read_text(encoding="utf-8")
+    except Exception:
+        return None
+
+
+def _jazz_ml_parse_eval_table(md: str) -> list[dict]:
+    """Extract rows from the first markdown table in md."""
+    rows = []
+    in_table = False
+    header = []
+    for line in md.splitlines():
+        line = line.strip()
+        if line.startswith("|") and line.endswith("|"):
+            cells = [c.strip() for c in line.strip("|").split("|")]
+            if not in_table:
+                header = cells
+                in_table = True
+            elif all(c.replace("-", "").replace(":", "") == "" for c in cells):
+                continue  # separator row
+            else:
+                rows.append(dict(zip(header, cells)))
+        else:
+            if in_table:
+                break
+    return rows
+
+
+def _jazz_ml_checkpoint_info(root: Path) -> list[dict]:
+    cp_dir = root / "checkpoints"
+    versions = [
+        ("phrase_planner", "phrase_planner_best.pt"),
+        ("v6.0", "v6_best.pt"),
+        ("v6.1.0", "v6.1.0_best.pt"),
+        ("v6.2.0", "v6.2.0_best.pt"),
+        ("v6.3.0", "v6.3.0_best.pt"),
+        ("v6.3.1", "v6.3.1_best.pt"),
+    ]
+    out = []
+    for label, fname in versions:
+        p = cp_dir / fname
+        exists = p.exists()
+        size_mb = round(p.stat().st_size / 1_048_576, 1) if exists else None
+        out.append({"version": label, "file": fname, "exists": exists, "size_mb": size_mb})
+    return out
+
+
+def _jazz_ml_solo_dirs(root: Path) -> list[dict]:
+    outputs = root / "outputs"
+    dirs = [
+        ("v6.2.0", "solos_v620_eval"),
+        ("v6.3.0", "solos_v630_eval"),
+        ("v6.3.1", "solos_v631_eval"),
+        ("v6.3.1 all_s1", "solos_v631_all_s1"),
+        ("v6.3.1 all_s2", "solos_v631_all_s2"),
+        ("v6.3.1 strong_s2", "solos_v631_strong_s2"),
+        ("v6.3.1 strong_s3", "solos_v631_strong_s3"),
+        ("v6.3.1 strong_s3_p1", "solos_v631_strong_s3_p1"),
+    ]
+    out = []
+    for label, dname in dirs:
+        d = outputs / dname
+        if d.exists() and d.is_dir():
+            mid_count = len(list(d.glob("*.mid")))
+            out.append({"label": label, "dir": dname, "mid_files": mid_count})
+    return out
+
+
+def _handle_jazz_ml(handler, parsed) -> None:
+    root = _jazz_ml_root()
+    outputs = root / "outputs"
+
+    eval_md = _jazz_ml_read_md(outputs / "solo_eval_report.md")
+    multiseed_md = _jazz_ml_read_md(outputs / "solo_eval_multiseed_report.md")
+    bias_grid_md = _jazz_ml_read_md(outputs / "v631_decoder_bias_grid.md")
+
+    eval_rows = _jazz_ml_parse_eval_table(eval_md) if eval_md else []
+    multiseed_rows = _jazz_ml_parse_eval_table(multiseed_md) if multiseed_md else []
+    bias_rows = _jazz_ml_parse_eval_table(bias_grid_md) if bias_grid_md else []
+
+    return j(handler, {
+        "checkpoints": _jazz_ml_checkpoint_info(root),
+        "solo_dirs": _jazz_ml_solo_dirs(root),
+        "eval_aggregate": eval_rows,
+        "multiseed_aggregate": multiseed_rows,
+        "bias_grid": bias_rows,
+        "reports_available": {
+            "solo_eval": eval_md is not None,
+            "multiseed_eval": multiseed_md is not None,
+            "bias_grid": bias_grid_md is not None,
+        },
+    })
 
 
 # ── GET route helpers

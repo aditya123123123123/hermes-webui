@@ -40,6 +40,7 @@ const APP_TITLEBAR_KEYS = {
   chat: 'tab_chat', tasks: 'tab_tasks', skills: 'tab_skills',
   memory: 'tab_memory', workspaces: 'tab_workspaces',
   profiles: 'tab_profiles', todos: 'tab_todos', insights: 'tab_insights', logs: 'tab_logs', settings: 'tab_settings',
+  jazzml: 'Jazz ML',
 };
 
 /**
@@ -239,6 +240,7 @@ async function switchPanel(name, opts = {}) {
   if (nextPanel === 'todos') loadTodos();
   if (nextPanel === 'insights') await loadInsights();
   if (nextPanel === 'logs') await loadLogs();
+  if (nextPanel === 'jazzml') await loadJazzMl();
   _syncLogsAutoRefresh();
   if (typeof _syncSystemHealthMonitorVisibility === 'function') _syncSystemHealthMonitorVisibility();
   if (nextPanel === 'settings') {
@@ -2930,6 +2932,87 @@ async function copyLogsAll() {
     showToast(t('logs_copied'));
   } catch(e) {
     showToast(t('copy_failed'), 'error');
+  }
+}
+
+// ── Jazz ML panel ──
+let _jazzMlLoaded = false;
+
+function _jazzMlCell(value) {
+  if (value === null || value === undefined || value === '') return '—';
+  return esc(String(value));
+}
+
+function _jazzMlTable(rows, columns) {
+  if (!rows || !rows.length) return '<div style="color:var(--muted);font-size:12px">No rows available yet.</div>';
+  return `<table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead><tr>${columns.map(c => `<th style="text-align:left;padding:6px;border-bottom:1px solid var(--border)">${esc(c.label)}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(row => `<tr>${columns.map(c => `<td style="padding:6px;border-bottom:1px solid var(--border-muted, var(--border));vertical-align:top">${_jazzMlCell(row[c.key])}</td>`).join('')}</tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function _jazzMlCard(title, body) {
+  return `<section class="detail-card" style="margin-bottom:12px">
+    <div class="detail-card-title">${esc(title)}</div>
+    ${body}
+  </section>`;
+}
+
+async function loadJazzMl(force=false) {
+  const box = $('jazzmlContent');
+  if (!box) return;
+  if (_jazzMlLoaded && !force) return;
+  box.innerHTML = `<div style="padding:12px;color:var(--muted);font-size:12px">${esc(t('loading') || 'Loading…')}</div>`;
+  try {
+    const data = await api('/api/jazz-ml');
+    const checkpoints = data.checkpoints || [];
+    const solos = data.solo_dirs || [];
+    const multi = data.multiseed_aggregate || [];
+    const bias = data.bias_grid || [];
+    const reports = data.reports_available || {};
+
+    const checkpointBody = _jazzMlTable(checkpoints, [
+      {key:'version', label:'Version'}, {key:'file', label:'Checkpoint'}, {key:'exists', label:'Present'}, {key:'size_mb', label:'MB'},
+    ]);
+    const soloBody = _jazzMlTable(solos, [
+      {key:'label', label:'Run'}, {key:'dir', label:'Output dir'}, {key:'mid_files', label:'MIDI files'},
+    ]);
+    const multiBody = _jazzMlTable(multi, [
+      {key:'version', label:'Version'}, {key:'pitches scored', label:'Pitches'}, {key:'chord-tone hit', label:'Chord-tone'}, {key:'chord+approach hit', label:'Chord+approach'},
+    ]);
+    const biasBody = _jazzMlTable(bias, [
+      {key:'config', label:'Decoder config'}, {key:'pitches scored', label:'Pitches'}, {key:'chord-tone hit', label:'Chord-tone'}, {key:'chord+approach hit', label:'Chord+approach'}, {key:'chord-tone delta vs none', label:'Δ chord-tone'},
+    ]);
+    const reportBody = `<div style="font-size:12px;color:var(--muted)">
+      solo_eval_report.md: <strong>${reports.solo_eval ? 'available' : 'missing'}</strong><br>
+      solo_eval_multiseed_report.md: <strong>${reports.multiseed_eval ? 'available' : 'missing'}</strong><br>
+      v631_decoder_bias_grid.md: <strong>${reports.bias_grid ? 'available' : 'missing'}</strong>
+    </div>`;
+    const timelineBody = `<ol style="font-size:12px;color:var(--text);padding-left:20px;line-height:1.55">
+      <li><strong>v6.2.0</strong>: baseline generated-solo harmonic metrics.</li>
+      <li><strong>v6.3.0</strong>: improved baseline before target-chord fix.</li>
+      <li><strong>v6.3.1</strong>: fixed target chord alignment and validation improved, but raw generation did not improve enough.</li>
+      <li><strong>Decoder bias grid</strong>: inference-time chord-tone steering improves generated harmonic hit rates.</li>
+      <li><strong>v6.3.2</strong>: harmonic-weight follow-up; appears here when artifacts/checkpoints are available.</li>
+    </ol>`;
+    const nextBody = `<ul style="font-size:12px;color:var(--text);padding-left:18px;line-height:1.55">
+      <li>Evaluate v6.3.2 generated solos against v6.3.1 and v6.3.0.</li>
+      <li>Compare raw sampling vs strong-beat and all-beat chord-tone bias.</li>
+      <li>Listen to MIDI outputs before choosing stricter decoder defaults.</li>
+    </ul>`;
+
+    box.innerHTML = [
+      _jazzMlCard('Progression timeline', timelineBody),
+      _jazzMlCard('Checkpoints', checkpointBody),
+      _jazzMlCard('Generated solo artifacts', soloBody),
+      _jazzMlCard('Multi-seed harmonic evaluation', multiBody),
+      _jazzMlCard('v6.3.1 decoder-bias grid', biasBody),
+      _jazzMlCard('Reports', reportBody),
+      _jazzMlCard('Next logical tasks', nextBody),
+    ].join('');
+    _jazzMlLoaded = true;
+  } catch (e) {
+    box.innerHTML = `<div style="padding:12px;color:var(--accent);font-size:12px">Jazz ML panel failed to load: ${esc(e.message || String(e))}</div>`;
   }
 }
 

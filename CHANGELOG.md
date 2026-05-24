@@ -3,6 +3,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add a local Jazz ML panel and `/api/jazz-ml` summary endpoint for the nested jazz solo generator project. The panel lists checkpoint presence, generated MIDI artifact directories, v6.2/v6.3/v6.3.1 progression notes, multi-seed harmonic metrics, and decoder-bias grid results while tolerating missing local artifacts.
+- Add `start-remote.sh` — a safe remote-access launcher that auto-detects the Tailscale IP and binds to it (narrowest blast radius). Falls back to `HERMES_REMOTE_BIND_HOST` or `--all-interfaces` (0.0.0.0) when explicitly requested. Prints a password reminder when `HERMES_WEBUI_PASSWORD` is unset. The existing `HERMES_WEBUI_HOST` / `HERMES_WEBUI_PASSWORD` / `HERMES_WEBUI_TLS_*` env vars are unchanged. See `docs/remote-access.md` for SSH-tunnel and firewall guidance.
 
 ## [v0.51.107] — 2026-05-21 — Release CE (stage-400 — 8-PR batch — pinned-sessions-limit getter rename + uploaded-file user-turn dedupe + active-run repair guard + incremental KaTeX streaming + profile default model on fresh boot + French locale completion + update-check error surfacing + release-update apply path)
 
